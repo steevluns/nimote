@@ -1,6 +1,12 @@
 name: Build Gamma Hotkeys (Windows 7)
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'GammaHotkeys/**'
+      - '.github/workflows/build-gamma-hotkeys.yml'
 jobs:
   build:
     runs-on: windows-latest
@@ -12,12 +18,12 @@ jobs:
       - name: Build .NET Framework 4.0 application
         shell: pwsh
         run: |
-          msbuild GammaHotkeys/GammaHotkeys.csproj /m /p:Configuration=Release /verbosity:minimal
+          msbuild .\GammaHotkeys\GammaHotkeys.csproj /m /p:Configuration=Release /verbosity:minimal
           if ($LASTEXITCODE -ne 0) { throw "MSBuild failed" }
-          if (!(Test-Path "GammaHotkeys/bin/Release/GammaHotkeys.exe")) { throw "EXE was not produced" }
+          if (!(Test-Path ".\GammaHotkeys\bin\Release\GammaHotkeys.exe")) { throw "EXE was not produced" }
       - name: Upload EXE
         uses: actions/upload-artifact@v4
         with:
           name: GammaHotkeys-Windows7
-          path: GammaHotkeys/bin/Release/GammaHotkeys.exe
+          path: .\GammaHotkeys\bin\Release\GammaHotkeys.exe
           if-no-files-found: error
