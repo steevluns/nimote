@@ -29,7 +29,7 @@ internal sealed class HotkeyWindow:Form {
  const int WM_HOTKEY=0x312;
  NotifyIcon tray;
  HotkeySetting[] hotkeys;
- int brightness=100,contrast=100,gamma=100,saturation=100;
+ int brightness=100,contrast=100,gamma=100,saturation=100,red=100,green=100,blue=100;
  bool magnificationReady=false;
  string ConfigFile { get { return Path.Combine(Application.UserAppDataPath,"settings.ini"); } }
  public HotkeyWindow(){
@@ -68,17 +68,17 @@ internal sealed class HotkeyWindow:Form {
    case 6:Close();break;
   }
  }
- void SetNeutral(){brightness=100;contrast=100;gamma=100;saturation=100;ApplyCurrent();}
+ void SetNeutral(){brightness=100;contrast=100;gamma=100;saturation=100;red=100;green=100;blue=100;ApplyCurrent();}
  Native.GammaRamp MakeRamp(){
   Native.GammaRamp r=new Native.GammaRamp();r.Red=new ushort[256];r.Green=new ushort[256];r.Blue=new ushort[256];
   for(int i=0;i<256;i++){
    double x=i/255.0;
-   r.Red[i]=Value(x);r.Green[i]=Value(x);r.Blue[i]=Value(x);
+   r.Red[i]=Value(x,red);r.Green[i]=Value(x,green);r.Blue[i]=Value(x,blue);
   }return r;
  }
- ushort Value(double x){
+ ushort Value(double x,int channel){
   double y=Math.Pow(x,100.0/Math.Max(20,gamma));
-  y=((y-.5)*(contrast/100.0)+.5)*(brightness/100.0);
+  y=((y-.5)*(contrast/100.0)+.5)*(brightness/100.0)*(channel/100.0);
   return (ushort)Math.Round(Math.Max(0,Math.Min(1,y))*65535.0);
  }
  void ApplyCurrent(){
@@ -91,14 +91,16 @@ internal sealed class HotkeyWindow:Form {
  void ShowSettings(){using(SettingsForm f=new SettingsForm(this))f.ShowDialog();}
  void SaveConfig(){
   try{Directory.CreateDirectory(Application.UserAppDataPath);using(StreamWriter w=new StreamWriter(ConfigFile,false)){
-   w.WriteLine(brightness);w.WriteLine(contrast);w.WriteLine(gamma);w.WriteLine(saturation);
+   w.WriteLine(brightness);w.WriteLine(contrast);w.WriteLine(gamma);w.WriteLine(saturation);w.WriteLine(red);w.WriteLine(green);w.WriteLine(blue);
    foreach(HotkeySetting h in hotkeys)w.WriteLine(((int)h.Key)+","+h.Modifiers);
   }}catch(Exception ex){MessageBox.Show("تعذر حفظ الإعدادات: "+ex.Message);}
  }
  void LoadConfig(){
   try{if(!File.Exists(ConfigFile))return;string[] a=File.ReadAllLines(ConfigFile);if(a.Length<11)return;
-   brightness=Clamp(int.Parse(a[0]),20,200);contrast=Clamp(int.Parse(a[1]),20,200);gamma=Clamp(int.Parse(a[2]),20,200);saturation=Clamp(int.Parse(a[3]),0,200);
-   for(int i=0;i<7;i++){string[] p=a[i+4].Split(',');hotkeys[i].Key=(Keys)int.Parse(p[0]);hotkeys[i].Modifiers=uint.Parse(p[1]);}
+   brightness=Clamp(int.Parse(a[0]),20,200);contrast=Clamp(int.Parse(a[1]),20,200);gamma=Clamp(int.Parse(a[2]),20,200);
+   if(a.Length>=14){saturation=Clamp(int.Parse(a[3]),0,200);red=Clamp(int.Parse(a[4]),20,200);green=Clamp(int.Parse(a[5]),20,200);blue=Clamp(int.Parse(a[6]),20,200);}else{saturation=Clamp(int.Parse(a[3]),0,200);red=green=blue=100;}
+   int offset=a.Length>=14?7:4;
+   for(int i=0;i<7;i++){string[] p=a[i+offset].Split(',');hotkeys[i].Key=(Keys)int.Parse(p[0]);hotkeys[i].Modifiers=uint.Parse(p[1]);}
   }catch{}
  }
  static int Clamp(int v,int min,int max){return Math.Max(min,Math.Min(max,v));}
@@ -107,16 +109,16 @@ internal sealed class HotkeyWindow:Form {
   if(tray!=null){tray.Visible=false;tray.Dispose();}SetNeutral();if(magnificationReady){try{Native.MagSetFullscreenColorEffect(new float[]{1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1});Native.MagUninitialize();}catch{}}
  }
  sealed class SettingsForm:Form {
-  HotkeyWindow owner;TrackBar[] bars=new TrackBar[4];Label[] values=new Label[4];TextBox[] keys=new TextBox[7];HotkeySetting[] edited;
-  string[] labels={"Brightness / السطوع","Contrast / التباين","Gamma","Color Saturation / تشبع الألوان"};
+  HotkeyWindow owner;TrackBar[] bars=new TrackBar[7];Label[] values=new Label[7];TextBox[] keys=new TextBox[7];HotkeySetting[] edited;
+  string[] labels={"Brightness / السطوع","Contrast / التباين","Gamma","Color Saturation / تشبع الألوان","Red / الأحمر","Green / الأخضر","Blue / الأزرق"};
   public SettingsForm(HotkeyWindow o){
    owner=o;edited=new HotkeySetting[7];for(int i=0;i<7;i++)edited[i]=new HotkeySetting(o.hotkeys[i].Name,o.hotkeys[i].Key,o.hotkeys[i].Modifiers);
-   Text="إعدادات Gamma Hotkeys";StartPosition=FormStartPosition.CenterScreen;FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=false;MinimizeBox=false;ClientSize=new Size(510,550);
+   Text="إعدادات Gamma Hotkeys";StartPosition=FormStartPosition.CenterScreen;FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=false;MinimizeBox=false;ClientSize=new Size(510,740);
    int y=12;
-   for(int i=0;i<4;i++){
+   for(int i=0;i<7;i++){
     Label l=new Label();l.Text=labels[i];l.SetBounds(15,y,90,24);Controls.Add(l);
     bars[i]=new TrackBar();bars[i].Minimum=20;bars[i].Maximum=200;bars[i].TickFrequency=20;bars[i].SetBounds(105,y-8,310,42);Controls.Add(bars[i]);
-    values[i]=new Label();values[i].SetBounds(420,y,65,24);Controls.Add(values[i]);int ix=i;bars[i].ValueChanged+=delegate{values[ix].Text=bars[ix].Value+"%";Preview();};y+=55;
+    values[i]=new Label();values[i].SetBounds(420,y,65,24);Controls.Add(values[i]);int ix=i;bars[i].ValueChanged+=delegate{values[ix].Text=bars[ix].Value+"%";Preview();};y+=50;
    }
    Label title=new Label();title.Text="تخصيص اختصارات لوحة المفاتيح (اضغط داخل المربع ثم المفاتيح)";title.SetBounds(15,y,480,25);Controls.Add(title);y+=30;
    string[] names={"Gamma منخفض","Gamma طبيعي","Gamma مرتفع","سطوع مرتفع","سطوع منخفض","إعادة محايد","خروج"};
@@ -124,10 +126,10 @@ internal sealed class HotkeyWindow:Form {
     Label l=new Label();l.Text=names[i];l.SetBounds(18,y,145,25);Controls.Add(l);
     keys[i]=new TextBox();keys[i].ReadOnly=true;keys[i].SetBounds(170,y-2,300,25);keys[i].Text=edited[i].Display;keys[i].Tag=i;keys[i].KeyDown+=CaptureKey;Controls.Add(keys[i]);y+=32;
    }
-   Button save=new Button();save.Text="حفظ وتطبيق";save.SetBounds(275,510,105,30);save.Click+=delegate{Save();};Controls.Add(save);
-   Button reset=new Button();reset.Text="افتراضي";reset.SetBounds(390,510,90,30);reset.Click+=delegate{ResetAll();};Controls.Add(reset);
-   Button close=new Button();close.Text="إغلاق";close.SetBounds(175,510,90,30);close.Click+=delegate{Close();};Controls.Add(close);
-   int[] v={o.brightness,o.contrast,o.gamma,o.saturation};for(int i=0;i<4;i++){bars[i].Value=v[i];values[i].Text=v[i]+"%";}
+   Button save=new Button();save.Text="حفظ وتطبيق";save.SetBounds(275,690,105,30);save.Click+=delegate{Save();};Controls.Add(save);
+   Button reset=new Button();reset.Text="افتراضي";reset.SetBounds(390,690,90,30);reset.Click+=delegate{ResetAll();};Controls.Add(reset);
+   Button close=new Button();close.Text="إغلاق";close.SetBounds(175,690,90,30);close.Click+=delegate{Close();};Controls.Add(close);
+   int[] v={o.brightness,o.contrast,o.gamma,o.saturation,o.red,o.green,o.blue};for(int i=0;i<7;i++){bars[i].Value=v[i];values[i].Text=v[i]+"%";}
   }
   void CaptureKey(object sender,KeyEventArgs e){
    int i=(int)((TextBox)sender).Tag;Keys k=e.KeyCode;if(k==Keys.ControlKey||k==Keys.Menu||k==Keys.ShiftKey)return;
@@ -135,14 +137,14 @@ internal sealed class HotkeyWindow:Form {
    if(mods==0){MessageBox.Show("اختر الاختصار مع Ctrl أو Alt أو Shift.");return;}
    edited[i].Key=k;edited[i].Modifiers=mods;keys[i].Text=edited[i].Display;e.SuppressKeyPress=true;e.Handled=true;
   }
-  void Preview(){if(bars[0]!=null){owner.brightness=bars[0].Value;owner.contrast=bars[1].Value;owner.gamma=bars[2].Value;owner.saturation=bars[3].Value;owner.ApplyCurrent();}}
+  void Preview(){if(bars[0]!=null){owner.brightness=bars[0].Value;owner.contrast=bars[1].Value;owner.gamma=bars[2].Value;owner.saturation=bars[3].Value;owner.red=bars[4].Value;owner.green=bars[5].Value;owner.blue=bars[6].Value;owner.ApplyCurrent();}}
   void Save(){
    for(int i=0;i<7;i++)for(int j=i+1;j<7;j++)if(edited[i].Key==edited[j].Key&&edited[i].Modifiers==edited[j].Modifiers){MessageBox.Show("يوجد اختصار مكرر: "+edited[i].Display);return;}
    for(int i=0;i<7;i++){owner.hotkeys[i].Key=edited[i].Key;owner.hotkeys[i].Modifiers=edited[i].Modifiers;}
    Preview();owner.SaveConfig();owner.RegisterAll();MessageBox.Show("تم حفظ الإعدادات والاختصارات.");Close();
   }
   void ResetAll(){
-   int[] v={100,100,100,100};for(int i=0;i<4;i++)bars[i].Value=v[i];
+   int[] v={100,100,100,100,100,100,100};for(int i=0;i<7;i++)bars[i].Value=v[i];
    Keys[] k={Keys.D1,Keys.D2,Keys.D3,Keys.D4,Keys.D5,Keys.D0,Keys.Q};
    for(int i=0;i<7;i++){edited[i].Key=k[i];edited[i].Modifiers=3;keys[i].Text=edited[i].Display;}
    Preview();
