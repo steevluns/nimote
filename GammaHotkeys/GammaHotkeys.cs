@@ -104,7 +104,7 @@ internal sealed class HotkeyWindow:Form {
   string[] labels={"السطوع","التباين","Gamma","الأحمر R","الأخضر G","الأزرق B"};
   public SettingsForm(HotkeyWindow o){
    owner=o;edited=new HotkeySetting[7];for(int i=0;i<7;i++)edited[i]=new HotkeySetting(o.hotkeys[i].Name,o.hotkeys[i].Key,o.hotkeys[i].Modifiers);
-   Text="إعدادات Gamma Hotkeys";StartPosition=FormStartPosition.CenterScreen;FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=false;MinimizeBox=false;ClientSize=new Size(510,590);
+   Text="إعدادات Gamma Hotkeys";StartPosition=FormStartPosition.CenterScreen;FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=false;MinimizeBox=false;ClientSize=new Size(510,650);
    int y=12;
    for(int i=0;i<6;i++){
     Label l=new Label();l.Text=labels[i];l.SetBounds(15,y,90,24);Controls.Add(l);
@@ -117,9 +117,9 @@ internal sealed class HotkeyWindow:Form {
     Label l=new Label();l.Text=names[i];l.SetBounds(18,y,145,25);Controls.Add(l);
     keys[i]=new TextBox();keys[i].ReadOnly=true;keys[i].SetBounds(170,y-2,300,25);keys[i].Text=edited[i].Display;keys[i].Tag=i;keys[i].KeyDown+=CaptureKey;Controls.Add(keys[i]);y+=32;
    }
-   Button save=new Button();save.Text="حفظ وتطبيق";save.SetBounds(275,550,105,30);save.Click+=delegate{Save();};Controls.Add(save);
-   Button reset=new Button();reset.Text="افتراضي";reset.SetBounds(390,550,90,30);reset.Click+=delegate{ResetAll();};Controls.Add(reset);
-   Button close=new Button();close.Text="إغلاق";close.SetBounds(175,550,90,30);close.Click+=delegate{Close();};Controls.Add(close);
+   Button save=new Button();save.Text="حفظ وتطبيق";save.SetBounds(275,610,105,30);save.Click+=delegate{Save();};Controls.Add(save);
+   Button reset=new Button();reset.Text="افتراضي";reset.SetBounds(390,610,90,30);reset.Click+=delegate{ResetAll();};Controls.Add(reset);
+   Button close=new Button();close.Text="إغلاق";close.SetBounds(175,610,90,30);close.Click+=delegate{Close();};Controls.Add(close);
    int[] v={o.brightness,o.contrast,o.gamma,o.red,o.green,o.blue};for(int i=0;i<6;i++){bars[i].Value=v[i];values[i].Text=v[i]+"%";}
   }
   void CaptureKey(object sender,KeyEventArgs e){
