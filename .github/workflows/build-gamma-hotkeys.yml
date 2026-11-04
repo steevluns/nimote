@@ -15,7 +15,7 @@ jobs:
         uses: actions/checkout@v4
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
-      - name: Build .NET Framework 4.0 application
+      - name: Build .NET Framework 4.8 application
         shell: pwsh
         run: |
           msbuild .\GammaHotkeys\GammaHotkeys.csproj /m /p:Configuration=Release /verbosity:minimal
