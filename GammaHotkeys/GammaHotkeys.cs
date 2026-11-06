@@ -113,22 +113,27 @@ internal sealed class HotkeyWindow:Form {
   string[] labels={"Brightness / السطوع","Contrast / التباين","Gamma","Color Saturation / تشبع الألوان","Red / الأحمر","Green / الأخضر","Blue / الأزرق"};
   public SettingsForm(HotkeyWindow o){
    owner=o;edited=new HotkeySetting[7];for(int i=0;i<7;i++)edited[i]=new HotkeySetting(o.hotkeys[i].Name,o.hotkeys[i].Key,o.hotkeys[i].Modifiers);
-   Text="إعدادات Gamma Hotkeys";StartPosition=FormStartPosition.CenterScreen;FormBorderStyle=FormBorderStyle.FixedDialog;MaximizeBox=false;MinimizeBox=false;ClientSize=new Size(510,740);
-   int y=12;
+   Text="إعدادات Gamma Hotkeys";StartPosition=FormStartPosition.CenterScreen;FormBorderStyle=FormBorderStyle.Sizable;MaximizeBox=false;MinimizeBox=false;ClientSize=new Size(650,650);MinimumSize=new Size(666,689);
+   CheckBox fullScreen=new CheckBox();fullScreen.Text="عرض شاشة كاملة";fullScreen.AutoSize=true;fullScreen.SetBounds(15,12,180,24);Controls.Add(fullScreen);
+   fullScreen.CheckedChanged+=delegate{
+    if(fullScreen.Checked){WindowState=FormWindowState.Maximized;}
+    else{WindowState=FormWindowState.Normal;ClientSize=new Size(650,650);StartPosition=FormStartPosition.CenterScreen;}
+   };
+   int y=46;
    for(int i=0;i<7;i++){
-    Label l=new Label();l.Text=labels[i];l.SetBounds(15,y,90,24);Controls.Add(l);
-    bars[i]=new TrackBar();bars[i].Minimum=20;bars[i].Maximum=200;bars[i].TickFrequency=20;bars[i].SetBounds(105,y-8,310,42);Controls.Add(bars[i]);
-    values[i]=new Label();values[i].SetBounds(420,y,65,24);Controls.Add(values[i]);int ix=i;bars[i].ValueChanged+=delegate{values[ix].Text=bars[ix].Value+"%";Preview();};y+=50;
+    Label l=new Label();l.Text=labels[i];l.SetBounds(15,y,125,24);Controls.Add(l);
+    bars[i]=new TrackBar();bars[i].Minimum=20;bars[i].Maximum=200;bars[i].TickFrequency=20;bars[i].SetBounds(140,y-9,390,40);Controls.Add(bars[i]);
+    values[i]=new Label();values[i].SetBounds(545,y,65,24);Controls.Add(values[i]);int ix=i;bars[i].ValueChanged+=delegate{values[ix].Text=bars[ix].Value+"%";Preview();};y+=38;
    }
-   Label title=new Label();title.Text="تخصيص اختصارات لوحة المفاتيح (اضغط داخل المربع ثم المفاتيح)";title.SetBounds(15,y,480,25);Controls.Add(title);y+=30;
+   Label title=new Label();title.Text="تخصيص اختصارات لوحة المفاتيح (اضغط داخل المربع ثم المفاتيح)";title.SetBounds(15,y+2,610,25);Controls.Add(title);y+=32;
    string[] names={"Gamma منخفض","Gamma طبيعي","Gamma مرتفع","سطوع مرتفع","سطوع منخفض","إعادة محايد","خروج"};
    for(int i=0;i<7;i++){
     Label l=new Label();l.Text=names[i];l.SetBounds(18,y,145,25);Controls.Add(l);
-    keys[i]=new TextBox();keys[i].ReadOnly=true;keys[i].SetBounds(170,y-2,300,25);keys[i].Text=edited[i].Display;keys[i].Tag=i;keys[i].KeyDown+=CaptureKey;Controls.Add(keys[i]);y+=32;
+    keys[i]=new TextBox();keys[i].ReadOnly=true;keys[i].SetBounds(170,y-2,440,25);keys[i].Text=edited[i].Display;keys[i].Tag=i;keys[i].KeyDown+=CaptureKey;Controls.Add(keys[i]);y+=29;
    }
-   Button save=new Button();save.Text="حفظ وتطبيق";save.SetBounds(275,690,105,30);save.Click+=delegate{Save();};Controls.Add(save);
-   Button reset=new Button();reset.Text="افتراضي";reset.SetBounds(390,690,90,30);reset.Click+=delegate{ResetAll();};Controls.Add(reset);
-   Button close=new Button();close.Text="إغلاق";close.SetBounds(175,690,90,30);close.Click+=delegate{Close();};Controls.Add(close);
+   Button close=new Button();close.Text="إغلاق";close.SetBounds(170,600,95,30);close.Click+=delegate{Close();};Controls.Add(close);
+   Button save=new Button();save.Text="حفظ وتطبيق";save.SetBounds(275,600,115,30);save.Click+=delegate{Save();};Controls.Add(save);
+   Button reset=new Button();reset.Text="افتراضي";reset.SetBounds(400,600,95,30);reset.Click+=delegate{ResetAll();};Controls.Add(reset);
    int[] v={o.brightness,o.contrast,o.gamma,o.saturation,o.red,o.green,o.blue};for(int i=0;i<7;i++){bars[i].Value=v[i];values[i].Text=v[i]+"%";}
   }
   void CaptureKey(object sender,KeyEventArgs e){
