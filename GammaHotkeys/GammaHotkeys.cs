@@ -78,7 +78,7 @@ internal sealed class HotkeyWindow:Form {
   try{ok=Native.SetDeviceGammaRamp(dc,ref r);}finally{Native.ReleaseDC(IntPtr.Zero,dc);}
   if(tray!=null)tray.ShowBalloonTip(1200,"Gamma Hotkeys",
    (ok?"تم تطبيق السطوع والتباين وGamma":"تعذر تطبيق Gamma")+
-   (saturationOk?"، وتم تطبيق مصفوفة الألوان من داخل البرنامج":"، تعذر تطبيق مصفوفة الألوان على هذا النظام")),
+   (saturationOk?"، وتم تطبيق مصفوفة الألوان من داخل البرنامج":"، تعذر تطبيق مصفوفة الألوان على هذا النظام"),
    ok&&saturationOk?ToolTipIcon.Info:ToolTipIcon.Warning);
  }
  float ClampF(float v,float lo,float hi){return Math.Max(lo,Math.Min(hi,v));}
