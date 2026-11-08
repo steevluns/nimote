@@ -54,9 +54,13 @@ internal sealed class HotkeyWindow:Form {
  void SetNeutral(){brightness=100;contrast=100;gamma=100;saturation=100;red=100;green=100;blue=100;ApplyCurrent();}
  Native.GammaRamp MakeRamp(){
   Native.GammaRamp r=new Native.GammaRamp();r.Red=new ushort[256];r.Green=new ushort[256];r.Blue=new ushort[256];
+  // Use per-channel gamma ramps as a fallback when the Magnification color matrix is unavailable.
+  int rampRed=magnificationReady?100:red;
+  int rampGreen=magnificationReady?100:green;
+  int rampBlue=magnificationReady?100:blue;
   for(int i=0;i<256;i++){
    double x=i/255.0;
-   r.Red[i]=Value(x,red);r.Green[i]=Value(x,green);r.Blue[i]=Value(x,blue);
+   r.Red[i]=Value(x,rampRed);r.Green[i]=Value(x,rampGreen);r.Blue[i]=Value(x,rampBlue);
   }return r;
  }
  ushort Value(double x,int channel){
@@ -66,10 +70,23 @@ internal sealed class HotkeyWindow:Form {
  }
  void ApplyCurrent(){
   Native.GammaRamp r=MakeRamp();IntPtr dc=Native.GetDC(IntPtr.Zero);bool ok=false;
-  bool saturationOk=false;
-  if(magnificationReady){float sat=saturation/100.0f,lr=0.2126f,lg=0.7152f,lb=0.0722f,iv=1.0f-sat;float[] m=new float[25];m[0]=lr*iv+sat;m[1]=lg*iv;m[2]=lb*iv;m[5]=lr*iv;m[6]=lg*iv+sat;m[7]=lb*iv;m[10]=lr*iv;m[11]=lg*iv;m[12]=lb*iv+sat;m[18]=1.0f;m[24]=1.0f;try{saturationOk=Native.MagSetFullscreenColorEffect(m);}catch{}}
+  bool colorMatrixOk=false;
+  // Combine saturation and RGB channel gains in one 5x5 color matrix.
+  if(magnificationReady){
+   float sat=saturation/100.0f,lr=0.2126f,lg=0.7152f,lb=0.0722f,iv=1.0f-sat;
+   float cr=red/100.0f,cg=green/100.0f,cb=blue/100.0f;
+   float[] m=new float[25];
+   m[0]=(lr*iv+sat)*cr;m[1]=lg*iv*cg;m[2]=lb*iv*cb;
+   m[5]=lr*iv*cr;m[6]=(lg*iv+sat)*cg;m[7]=lb*iv*cb;
+   m[10]=lr*iv*cr;m[11]=lg*iv*cg;m[12]=(lb*iv+sat)*cb;
+   m[18]=1.0f;m[24]=1.0f;
+   try{colorMatrixOk=Native.MagSetFullscreenColorEffect(m);}catch{colorMatrixOk=false;}
+  }
   try{ok=Native.SetDeviceGammaRamp(dc,ref r);}finally{Native.ReleaseDC(IntPtr.Zero,dc);}
-  if(tray!=null)tray.ShowBalloonTip(1200,"Gamma Hotkeys",(ok?"تم تطبيق السطوع والتباين وGamma":"تعذر تطبيق Gamma")+(magnificationReady?(saturationOk?"، وتشبع الألوان":"، تعذر تطبيق تشبع الألوان"):"، تشبع الألوان غير مدعوم"),ok&&(!magnificationReady||saturationOk)?ToolTipIcon.Info:ToolTipIcon.Warning);
+  if(tray!=null)tray.ShowBalloonTip(1200,"Gamma Hotkeys",
+   (ok?"تم تطبيق السطوع والتباين وGamma":"تعذر تطبيق Gamma")+
+   (magnificationReady?(colorMatrixOk?"، وتم تطبيق RGB وتشبع الألوان":"، تعذر تطبيق مصفوفة RGB والألوان"):"، RGB يعمل عبر Gamma Ramp، لكن تشبع الألوان يحتاج دعم Magnification"),
+   ok&&(!magnificationReady||colorMatrixOk)?ToolTipIcon.Info:ToolTipIcon.Warning);
  }
  void ShowSettings(){using(SettingsForm f=new SettingsForm(this))f.ShowDialog();}
  void SaveConfig(){
@@ -104,7 +121,7 @@ internal sealed class HotkeyWindow:Form {
    int y=46;
    for(int i=0;i<7;i++){
     Label l=new Label();l.Text=labels[i];l.SetBounds(15,y,125,24);Controls.Add(l);
-    bars[i]=new TrackBar();bars[i].Minimum=20;bars[i].Maximum=200;bars[i].TickFrequency=20;bars[i].SetBounds(140,y-9,390,40);Controls.Add(bars[i]);
+    bars[i]=new TrackBar();bars[i].Minimum=(i==3?0:20);bars[i].Maximum=200;bars[i].TickFrequency=20;bars[i].SetBounds(140,y-9,390,40);Controls.Add(bars[i]);
     values[i]=new Label();values[i].SetBounds(545,y,65,24);Controls.Add(values[i]);int ix=i;bars[i].ValueChanged+=delegate{values[ix].Text=bars[ix].Value+"%";Preview();};y+=38;
    }
    Label hotkeyTitle=new Label();hotkeyTitle.Text="اختصارات حفظ الوضع الحالي";hotkeyTitle.SetBounds(15,330,610,24);Controls.Add(hotkeyTitle);
