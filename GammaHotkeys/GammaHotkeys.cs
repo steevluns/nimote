@@ -20,6 +20,69 @@ internal static class Native {
   [MarshalAs(UnmanagedType.ByValArray,SizeConst=256)] public ushort[] Blue;
  }
 }
+
+// AMD ADL saturation control. Uses the AMD driver so the adjustment is applied
+// at the display-driver level rather than through the Magnification API.
+internal static class AmdAdl {
+ const int ADL_OK=0, ADL_DISPLAY_COLOR_SATURATION=1<<2;
+ [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate IntPtr AllocDelegate(int size);
+ [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int MainCreateDelegate(AllocDelegate callback,int enumConnectedAdapters);
+ [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int MainDestroyDelegate();
+ [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int AdapterCountDelegate(ref int count);
+ [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int ColorGetDelegate(int adapter,int display,int type,ref int current,ref int def,ref int min,ref int max,ref int step);
+ [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int ColorSetDelegate(int adapter,int display,int type,int current);
+ [DllImport("kernel32.dll",CharSet=CharSet.Ansi,SetLastError=true)] static extern IntPtr LoadLibrary(string name);
+ [DllImport("kernel32.dll",CharSet=CharSet.Ansi,SetLastError=true)] static extern IntPtr GetProcAddress(IntPtr module,string name);
+ [DllImport("kernel32.dll")] static extern bool FreeLibrary(IntPtr module);
+ static IntPtr module=IntPtr.Zero;
+ static MainDestroyDelegate destroy;
+ static ColorSetDelegate set;
+ static int adapter=-1,display=-1,original=100,defaultValue=100,minValue=0,maxValue=200;
+ static bool initialized=false;
+ static IntPtr Alloc(int size){return Marshal.AllocHGlobal(size);}
+ static T Proc<T>(string name) where T:class {
+  IntPtr p=GetProcAddress(module,name);if(p==IntPtr.Zero)return null;
+  return Marshal.GetDelegateForFunctionPointer(p,typeof(T)) as T;
+ }
+ public static bool Initialize(){
+  if(initialized)return true;
+  module=LoadLibrary("atiadlxx.dll");if(module==IntPtr.Zero)module=LoadLibrary("atiadlxy.dll");
+  if(module==IntPtr.Zero)return false;
+  MainCreateDelegate create=Proc<MainCreateDelegate>("ADL_Main_Control_Create");
+  destroy=Proc<MainDestroyDelegate>("ADL_Main_Control_Destroy");
+  AdapterCountDelegate countFn=Proc<AdapterCountDelegate>("ADL_Adapter_NumberOfAdapters_Get");
+  ColorGetDelegate get=Proc<ColorGetDelegate>("ADL_Display_Color_Get");
+  set=Proc<ColorSetDelegate>("ADL_Display_Color_Set");
+  if(create==null||destroy==null||countFn==null||get==null||set==null){Shutdown();return false;}
+  AllocDelegate callback=new AllocDelegate(Alloc);
+  if(create(callback,1)!=ADL_OK){Shutdown();return false;}
+  int count=0;if(countFn(ref count)!=ADL_OK||count<=0){Shutdown();return false;}
+  for(int a=0;a<count;a++)for(int d=0;d<16;d++){
+   int cur=0,def=0,mn=0,mx=0,step=0;
+   if(get(a,d,ADL_DISPLAY_COLOR_SATURATION,ref cur,ref def,ref mn,ref mx,ref step)==ADL_OK&&mx>mn){
+    adapter=a;display=d;original=cur;defaultValue=def;minValue=mn;maxValue=mx;initialized=true;return true;
+   }
+  }
+  Shutdown();return false;
+ }
+ public static bool SetPercent(int percent){
+  if(!initialized||set==null)return false;
+  percent=Math.Max(0,Math.Min(200,percent));
+  int value;
+  if(percent==100)value=defaultValue;
+  else if(percent<100)value=minValue+(int)Math.Round((defaultValue-minValue)*(percent/100.0));
+  else value=defaultValue+(int)Math.Round((maxValue-defaultValue)*((percent-100)/100.0));
+  value=Math.Max(minValue,Math.Min(maxValue,value));
+  return set(adapter,display,ADL_DISPLAY_COLOR_SATURATION,value)==ADL_OK;
+ }
+ public static void Restore(){if(initialized&&set!=null)set(adapter,display,ADL_DISPLAY_COLOR_SATURATION,original);}
+ public static void Shutdown(){
+  try{if(destroy!=null)destroy();}catch{}
+  destroy=null;set=null;initialized=false;adapter=-1;display=-1;
+  if(module!=IntPtr.Zero){FreeLibrary(module);module=IntPtr.Zero;}
+ }
+}
+
 internal sealed class HotkeyWindow:Form {
  const int WM_HOTKEY=0x312;
  NotifyIcon tray;
@@ -27,7 +90,7 @@ internal sealed class HotkeyWindow:Form {
  uint[] saveMods=new uint[]{3,3,3,3,3,3,3,3,3};
  int[][] profiles=new int[9][];
  int brightness=100,contrast=100,gamma=100,saturation=100,red=100,green=100,blue=100;
- bool magnificationReady=false;
+ bool magnificationReady=false; bool amdSaturationReady=false;
  string ConfigFile { get { return Path.Combine(Application.UserAppDataPath,"settings.ini"); } }
  public HotkeyWindow(){
   LoadConfig();LoadProfiles();
@@ -37,6 +100,7 @@ internal sealed class HotkeyWindow:Form {
  void Loaded(object s,EventArgs e){
   RegisterSaveHotkeys();
   try{magnificationReady=Native.MagInitialize();if(magnificationReady)Native.MagSetFullscreenTransform(1.0f,0,0);}catch{magnificationReady=false;}
+  amdSaturationReady=AmdAdl.Initialize();
   tray=new NotifyIcon();tray.Icon=SystemIcons.Application;tray.Text="Gamma Hotkeys";ContextMenu m=new ContextMenu();
   m.MenuItems.Add("الإعدادات: الألوان والسطوع",delegate{ShowSettings();});
   m.MenuItems.Add("تطبيق الإعدادات الحالية",delegate{ApplyCurrent();});
@@ -70,23 +134,12 @@ internal sealed class HotkeyWindow:Form {
  }
  void ApplyCurrent(){
   Native.GammaRamp r=MakeRamp();IntPtr dc=Native.GetDC(IntPtr.Zero);bool ok=false;
-  bool colorMatrixOk=false;
-  // Combine saturation and RGB channel gains in one 5x5 color matrix.
-  if(magnificationReady){
-   float sat=saturation/100.0f,lr=0.2126f,lg=0.7152f,lb=0.0722f,iv=1.0f-sat;
-   float cr=red/100.0f,cg=green/100.0f,cb=blue/100.0f;
-   float[] m=new float[25];
-   m[0]=(lr*iv+sat)*cr;m[1]=lg*iv*cg;m[2]=lb*iv*cb;
-   m[5]=lr*iv*cr;m[6]=(lg*iv+sat)*cg;m[7]=lb*iv*cb;
-   m[10]=lr*iv*cr;m[11]=lg*iv*cg;m[12]=(lb*iv+sat)*cb;
-   m[18]=1.0f;m[24]=1.0f;
-   try{colorMatrixOk=Native.MagSetFullscreenColorEffect(m);}catch{colorMatrixOk=false;}
-  }
+  bool saturationOk=amdSaturationReady&&AmdAdl.SetPercent(saturation);
   try{ok=Native.SetDeviceGammaRamp(dc,ref r);}finally{Native.ReleaseDC(IntPtr.Zero,dc);}
   if(tray!=null)tray.ShowBalloonTip(1200,"Gamma Hotkeys",
    (ok?"تم تطبيق السطوع والتباين وGamma":"تعذر تطبيق Gamma")+
-   (magnificationReady?(colorMatrixOk?"، وتم تطبيق RGB وتشبع الألوان":"، تعذر تطبيق مصفوفة RGB والألوان"):"، RGB يعمل عبر Gamma Ramp، لكن تشبع الألوان يحتاج دعم Magnification"),
-   ok&&(!magnificationReady||colorMatrixOk)?ToolTipIcon.Info:ToolTipIcon.Warning);
+   (saturationOk?"، وتم تطبيق تشبع الألوان عبر AMD ADL":(amdSaturationReady?"، فشل تعريف AMD في تطبيق التشبع":"، لم يتم العثور على دعم AMD ADL للتشبع")),
+   ok&&saturationOk?ToolTipIcon.Info:ToolTipIcon.Warning);
  }
  void ShowSettings(){using(SettingsForm f=new SettingsForm(this))f.ShowDialog();}
  void SaveConfig(){
@@ -105,7 +158,9 @@ internal sealed class HotkeyWindow:Form {
  static int Clamp(int v,int min,int max){return Math.Max(min,Math.Min(max,v));}
  void Closing(object s,FormClosingEventArgs e){
   for(int i=1;i<=9;i++)Native.UnregisterHotKey(Handle,i);
-  if(tray!=null){tray.Visible=false;tray.Dispose();}SetNeutral();if(magnificationReady){try{Native.MagSetFullscreenColorEffect(new float[]{1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1});Native.MagUninitialize();}catch{}}
+  if(tray!=null){tray.Visible=false;tray.Dispose();}
+  AmdAdl.Restore();AmdAdl.Shutdown();SetNeutral();
+  if(magnificationReady){try{Native.MagUninitialize();}catch{}}
  }
  sealed class SettingsForm:Form {
   HotkeyWindow owner;TrackBar[] bars=new TrackBar[7];Label[] values=new Label[7];TextBox[] hotkeyBoxes=new TextBox[9];Keys[] editedKeys=new Keys[9];uint[] editedMods=new uint[9];
