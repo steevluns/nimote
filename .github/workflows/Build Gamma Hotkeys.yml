@@ -1,0 +1,35 @@
+name: Build Gamma Hotkeys (Windows 7)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'GammaHotkeys/**'
+      - '.github/workflows/Build Gamma Hotkeys.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build .NET Framework 4.8 application
+        shell: pwsh
+        run: |
+          msbuild GammaHotkeys/GammaHotkeys.csproj /m /p:Configuration=Release /p:Platform=AnyCPU /verbosity:minimal
+
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: GammaHotkeys-Windows7
+          path: GammaHotkeys/bin/Release/GammaHotkeys.exe
+          if-no-files-found: error
