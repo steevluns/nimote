@@ -57,9 +57,9 @@ internal sealed class HotkeyWindow:Form {
  Native.GammaRamp MakeRamp(){
   Native.GammaRamp r=new Native.GammaRamp();r.Red=new ushort[256];r.Green=new ushort[256];r.Blue=new ushort[256];
   // Use per-channel gamma ramps as a fallback when the Magnification color matrix is unavailable.
-  int rampRed=magnificationReady?100:red;
-  int rampGreen=magnificationReady?100:green;
-  int rampBlue=magnificationReady?100:blue;
+  int rampRed=100;
+  int rampGreen=100;
+  int rampBlue=100;
   for(int i=0;i<256;i++){
    double x=i/255.0;
    r.Red[i]=Value(x,rampRed);r.Green[i]=Value(x,rampGreen);r.Blue[i]=Value(x,rampBlue);
@@ -87,7 +87,7 @@ internal sealed class HotkeyWindow:Form {
   // are applied around the neutral midpoint.
   float sat=ClampF(saturation/100.0f,0.0f,2.0f);
   float rr=red/100.0f, gg=green/100.0f, bb=blue/100.0f;
-  float c=contrast/100.0f, b=(brightness-100)/200.0f;
+  float c=1.0f, b=0.0f;
   float lr=0.213f,lg=0.715f,lb=0.072f;
   float[] m=new float[25];
   m[0]=(lr+sat*(1-lr))*rr*c; m[1]=(lg-sat*lr)*rr*c; m[2]=(lb-sat*lr)*rr*c;
@@ -97,7 +97,7 @@ internal sealed class HotkeyWindow:Form {
   m[4]=0.5f*(1-c)+b; m[9]=0.5f*(1-c)+b; m[14]=0.5f*(1-c)+b;
   m[24]=1.0f;
   try{
-   if(Environment.OSVersion.Version.Major>=6 && Environment.OSVersion.Version.Major<6+2){
+   if(Environment.OSVersion.Version.Major==6 && Environment.OSVersion.Version.Minor==1){
     // Windows 7: legacy desktop color-effect entry point (requires Aero/DWM).
     return Native.SetMagnificationDesktopColorEffect(m);
    }
