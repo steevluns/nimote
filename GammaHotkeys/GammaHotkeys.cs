@@ -46,12 +46,11 @@ internal sealed class HotkeyWindow:Form {
   for(int p=0;p<9;p++){int slot=p+1;m.MenuItems.Add("استعادة الوضع "+slot,delegate{LoadProfile(slot-1);});}
   m.MenuItems.Add("إعادة محايد",delegate{SetNeutral();});
   m.MenuItems.Add("خروج",delegate{Close();});tray.ContextMenu=m;tray.Visible=true;
-  tray.ShowBalloonTip(2200,"Gamma Hotkeys","اضغط بزر الفأرة الأيمن على الأيقونة لفتح الإعدادات.",ToolTipIcon.Info);
  }
  void RegisterSaveHotkeys(){for(int i=0;i<9;i++){Native.UnregisterHotKey(Handle,i+1);Native.RegisterHotKey(Handle,i+1,saveMods[i],(uint)saveKeys[i]);}}
  protected override void WndProc(ref Message msg){if(msg.Msg==WM_HOTKEY){int id=msg.WParam.ToInt32();if(id>=1&&id<=9)SaveProfile(id-1);}base.WndProc(ref msg);}
  int[] CurrentValues(){return new int[]{brightness,contrast,gamma,saturation,red,green,blue};}
- void SaveProfile(int slot){profiles[slot]=CurrentValues();try{string path=Path.Combine(Application.UserAppDataPath,"profiles.ini");string[] lines=new string[9];for(int i=0;i<9;i++)lines[i]=profiles[i]==null?"":String.Join(",",Array.ConvertAll(profiles[i],delegate(int x){return x.ToString();}));File.WriteAllLines(path,lines);if(tray!=null)tray.ShowBalloonTip(1300,"تم حفظ الوضع "+(slot+1),"تم حفظ إعدادات الشاشة الحالية.",ToolTipIcon.Info);}catch(Exception ex){MessageBox.Show("تعذر حفظ الوضع: "+ex.Message);}}
+ void SaveProfile(int slot){profiles[slot]=CurrentValues();try{string path=Path.Combine(Application.UserAppDataPath,"profiles.ini");string[] lines=new string[9];for(int i=0;i<9;i++)lines[i]=profiles[i]==null?"":String.Join(",",Array.ConvertAll(profiles[i],delegate(int x){return x.ToString();}));File.WriteAllLines(path,lines);}catch(Exception ex){MessageBox.Show("تعذر حفظ الوضع: "+ex.Message);}}
  void LoadProfile(int slot){if(profiles[slot]==null){MessageBox.Show("لا يوجد وضع محفوظ في الخانة "+(slot+1));return;}int[] v=profiles[slot];brightness=v[0];contrast=v[1];gamma=v[2];saturation=v[3];red=v[4];green=v[5];blue=v[6];ApplyCurrent();}
  void LoadProfiles(){try{string p=Path.Combine(Application.UserAppDataPath,"profiles.ini");if(!File.Exists(p))return;string[] lines=File.ReadAllLines(p);for(int i=0;i<Math.Min(9,lines.Length);i++){if(String.IsNullOrWhiteSpace(lines[i]))continue;string[] x=lines[i].Split(',');if(x.Length!=7)continue;profiles[i]=Array.ConvertAll(x,delegate(string t){return int.Parse(t);});}}catch{}}
  void SetNeutral(){brightness=100;contrast=100;gamma=100;saturation=100;red=100;green=100;blue=100;ApplyCurrent();}
@@ -76,10 +75,7 @@ internal sealed class HotkeyWindow:Form {
   bool colorOk=ApplyColorMatrix();
   bool saturationOk=colorOk;
   try{ok=Native.SetDeviceGammaRamp(dc,ref r);}finally{Native.ReleaseDC(IntPtr.Zero,dc);}
-  if(tray!=null)tray.ShowBalloonTip(1200,"Gamma Hotkeys",
-   (ok?"تم تطبيق السطوع والتباين وGamma":"تعذر تطبيق Gamma")+
-   (saturationOk?"، وتم تطبيق مصفوفة الألوان من داخل البرنامج":"، تعذر تطبيق مصفوفة الألوان على هذا النظام"),
-   ok&&saturationOk?ToolTipIcon.Info:ToolTipIcon.Warning);
+  
  }
  float ClampF(float v,float lo,float hi){return Math.Max(lo,Math.Min(hi,v));}
  bool ApplyColorMatrix(){
