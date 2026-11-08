@@ -13,7 +13,8 @@ internal static class Native {
  [DllImport("Magnification.dll")] public static extern bool MagInitialize();
  [DllImport("Magnification.dll")] public static extern bool MagUninitialize();
  [DllImport("Magnification.dll")] public static extern bool MagSetFullscreenTransform(float magnification,int x,int y);
- [DllImport("Magnification.dll")] public static extern bool MagSetFullscreenColorEffect([In] float[] effect);\n [DllImport("user32.dll", EntryPoint="SetMagnificationDesktopColorEffect", SetLastError=true)] public static extern bool SetMagnificationDesktopColorEffect([In] float[] effect);
+ [DllImport("Magnification.dll")] public static extern bool MagSetFullscreenColorEffect([In] float[] effect);
+ [DllImport("user32.dll", EntryPoint="SetMagnificationDesktopColorEffect", SetLastError=true)] public static extern bool SetMagnificationDesktopColorEffect([In] float[] effect);
  [StructLayout(LayoutKind.Sequential)] public struct GammaRamp {
   [MarshalAs(UnmanagedType.ByValArray,SizeConst=256)] public ushort[] Red;
   [MarshalAs(UnmanagedType.ByValArray,SizeConst=256)] public ushort[] Green;
@@ -57,9 +58,9 @@ internal sealed class HotkeyWindow:Form {
  Native.GammaRamp MakeRamp(){
   Native.GammaRamp r=new Native.GammaRamp();r.Red=new ushort[256];r.Green=new ushort[256];r.Blue=new ushort[256];
   // Use per-channel gamma ramps as a fallback when the Magnification color matrix is unavailable.
-  int rampRed=100;
-  int rampGreen=100;
-  int rampBlue=100;
+  int rampRed=red;
+  int rampGreen=green;
+  int rampBlue=blue;
   for(int i=0;i<256;i++){
    double x=i/255.0;
    r.Red[i]=Value(x,rampRed);r.Green[i]=Value(x,rampGreen);r.Blue[i]=Value(x,rampBlue);
@@ -86,13 +87,13 @@ internal sealed class HotkeyWindow:Form {
   // Saturation is a true RGB color-matrix operation; RGB gains and contrast
   // are applied around the neutral midpoint.
   float sat=ClampF(saturation/100.0f,0.0f,2.0f);
-  float rr=red/100.0f, gg=green/100.0f, bb=blue/100.0f;
+  // Saturation is independent from brightness, contrast, gamma and RGB gains.
   float c=1.0f, b=0.0f;
   float lr=0.213f,lg=0.715f,lb=0.072f;
   float[] m=new float[25];
-  m[0]=(lr+sat*(1-lr))*rr*c; m[1]=(lg-sat*lr)*rr*c; m[2]=(lb-sat*lr)*rr*c;
-  m[5]=(lr-sat*lg)*gg*c; m[6]=(lg+sat*(1-lg))*gg*c; m[7]=(lb-sat*lg)*gg*c;
-  m[10]=(lr-sat*lb)*bb*c; m[11]=(lg-sat*lb)*bb*c; m[12]=(lb+sat*(1-lb))*bb*c;
+  m[0]=(lr+sat*(1-lr))*c; m[1]=(lg-sat*lr)*c; m[2]=(lb-sat*lr)*c;
+  m[5]=(lr-sat*lg)*c; m[6]=(lg+sat*(1-lg))*c; m[7]=(lb-sat*lg)*c;
+  m[10]=(lr-sat*lb)*c; m[11]=(lg-sat*lb)*c; m[12]=(lb+sat*(1-lb))*c;
   m[18]=1.0f;
   m[4]=0.5f*(1-c)+b; m[9]=0.5f*(1-c)+b; m[14]=0.5f*(1-c)+b;
   m[24]=1.0f;
