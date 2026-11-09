@@ -91,7 +91,7 @@ internal sealed class HotkeyWindow:Form {
  public HotkeyWindow(){
   LoadConfig();LoadProfiles();
   ShowInTaskbar=false;WindowState=FormWindowState.Minimized;FormBorderStyle=FormBorderStyle.FixedToolWindow;Opacity=0;
-  Load+=Loaded;FormClosing+=Closing;
+  Load+=Loaded;FormClosing+=OnClosing;
  }
  void Loaded(object s,EventArgs e){
   try{magnificationReady=Native.MagInitialize();}catch{magnificationReady=false;}
@@ -138,14 +138,14 @@ internal sealed class HotkeyWindow:Form {
  void SaveConfig(){try{Directory.CreateDirectory(Application.UserAppDataPath);using(StreamWriter w=new StreamWriter(ConfigFile,false)){w.WriteLine(brightness);w.WriteLine(contrast);w.WriteLine(gamma);w.WriteLine(saturation);w.WriteLine(red);w.WriteLine(green);w.WriteLine(blue);}}catch(Exception ex){MessageBox.Show("تعذر حفظ الإعدادات: "+ex.Message);}}
  void LoadConfig(){try{if(!File.Exists(ConfigFile))return;string[] a=File.ReadAllLines(ConfigFile);if(a.Length<7)return;brightness=Clamp(int.Parse(a[0]),20,170);contrast=Clamp(int.Parse(a[1]),20,170);gamma=Clamp(int.Parse(a[2]),20,170);saturation=Clamp(int.Parse(a[3]),0,170);red=Clamp(int.Parse(a[4]),20,170);green=Clamp(int.Parse(a[5]),20,170);blue=Clamp(int.Parse(a[6]),20,170);}catch{}}
  static int Clamp(int v,int min,int max){return Math.Max(min,Math.Min(max,v));}
- void Closing(object s,FormClosingEventArgs e){for(int i=1;i<=9;i++)Native.UnregisterHotKey(Handle,i);if(tray!=null){tray.Visible=false;tray.Dispose();}ResetColorMatrix();if(magnificationReady){try{Native.MagUninitialize();}catch{}}}
+ void OnClosing(object s,FormClosingEventArgs e){for(int i=1;i<=9;i++)Native.UnregisterHotKey(Handle,i);if(tray!=null){tray.Visible=false;tray.Dispose();}ResetColorMatrix();if(magnificationReady){try{Native.MagUninitialize();}catch{}}}
  sealed class SettingsForm:Form {
   HotkeyWindow owner;TrackBar[] bars=new TrackBar[7];Label[] values=new Label[7]; TextBox hotkeyBox; TextBox profileNameBox; Keys capturedKey=Keys.None; uint capturedMods=0;
   string[] labels={"Brightness / السطوع","Contrast / التباين","Gamma","Color Saturation / تشبع الألوان","Red / الأحمر","Green / الأخضر","Blue / الأزرق"};
   public SettingsForm(HotkeyWindow o){
-   owner=o;Text="إعدادات Gamma Hotkeys";StartPosition=FormStartPosition.CenterScreen;FormBorderStyle=FormBorderStyle.Sizable;MaximizeBox=false;MinimizeBox=false;ClientSize=new Size(650,430);MinimumSize=new Size(666,469);
+   owner=o;Text="إعدادات Gamma Hotkeys";StartPosition=FormStartPosition.CenterScreen;FormBorderStyle=FormBorderStyle.Sizable;MaximizeBox=false;MinimizeBox=false;ClientSize=new Size(650,470);MinimumSize=new Size(666,509);
    CheckBox fullScreen=new CheckBox();fullScreen.Text="عرض شاشة كاملة";fullScreen.AutoSize=true;fullScreen.SetBounds(15,12,180,24);Controls.Add(fullScreen);
-   fullScreen.CheckedChanged+=delegate{if(fullScreen.Checked)WindowState=FormWindowState.Maximized;else{WindowState=FormWindowState.Normal;ClientSize=new Size(650,430);StartPosition=FormStartPosition.CenterScreen;}};
+   fullScreen.CheckedChanged+=delegate{if(fullScreen.Checked)WindowState=FormWindowState.Maximized;else{WindowState=FormWindowState.Normal;ClientSize=new Size(650,470);StartPosition=FormStartPosition.CenterScreen;}};
    int y=46;
    for(int i=0;i<7;i++){Label l=new Label();l.Text=labels[i];l.SetBounds(15,y,125,24);Controls.Add(l);bars[i]=new TrackBar();bars[i].Minimum=(i==3?0:20);bars[i].Maximum=170;bars[i].TickFrequency=20;bars[i].SetBounds(140,y-9,390,40);Controls.Add(bars[i]);values[i]=new Label();values[i].SetBounds(545,y,65,24);Controls.Add(values[i]);int ix=i;bars[i].ValueChanged+=delegate{values[ix].Text=bars[ix].Value+"%";Preview();};y+=42;}
    Label hkLabel=new Label();hkLabel.Text="Hotkeys";hkLabel.SetBounds(15,345,80,25);Controls.Add(hkLabel);hotkeyBox=new TextBox();hotkeyBox.ReadOnly=true;hotkeyBox.Text="اضغط هنا ثم أدخل الاختصار";hotkeyBox.SetBounds(100,342,220,28);hotkeyBox.Click+=delegate{hotkeyBox.Focus();hotkeyBox.Text="اضغط الاختصار الآن";};hotkeyBox.KeyDown+=CaptureHotkey;Controls.Add(hotkeyBox);
