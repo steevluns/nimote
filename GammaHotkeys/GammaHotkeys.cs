@@ -43,7 +43,7 @@ internal sealed class SaturationOverlay:Form {
   FormBorderStyle=FormBorderStyle.None;ShowInTaskbar=false;TopMost=true;
   StartPosition=FormStartPosition.Manual;Bounds=SystemInformation.VirtualScreen;
  }
- protected override CreateParams CreateParams { get { CreateParams p=base.CreateParams;p.ExStyle|=WS_EX_LAYERED|0x00000080;return p; } }
+ protected override CreateParams CreateParams { get { CreateParams p=base.CreateParams;p.ExStyle|=unchecked((int)(WS_EX_LAYERED|0x00000080));return p; } }
  protected override void OnShown(EventArgs e){
   base.OnShown(e);
   Native.SetLayeredWindowAttributes(Handle,0,255,LWA_ALPHA);
