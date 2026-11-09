@@ -92,12 +92,10 @@ internal sealed class HotkeyWindow:Form {
  void Loaded(object s,EventArgs e){
   try{magnificationReady=Native.MagInitialize();}catch{magnificationReady=false;}
   tray=new NotifyIcon();tray.Icon=SystemIcons.Application;tray.Text="Gamma Hotkeys";ContextMenu m=new ContextMenu();
-  m.MenuItems.Add("الإعدادات: الألوان والسطوع",delegate{ShowSettings();});
-  m.MenuItems.Add("تطبيق الإعدادات الحالية",delegate{ApplyCurrent();});
-  for(int p=0;p<9;p++){int slot=p;m.MenuItems.Add("استعادة: "+(String.IsNullOrEmpty(profileNames[slot])?"الوضع "+(slot+1):profileNames[slot]),delegate{LoadProfile(slot);});}
+  m.MenuItems.Add("الإعدادات",delegate{ShowSettings();});
+  m.MenuItems.Add("خروج",delegate{Close();});
   RegisterProfileHotkeys();
-  m.MenuItems.Add("إعادة محايد",delegate{SetNeutral();});
-  m.MenuItems.Add("خروج",delegate{Close();});tray.ContextMenu=m;tray.Visible=true;
+  tray.ContextMenu=m;tray.Visible=true;
  }
  NotifyIcon tray;
  protected override void WndProc(ref Message msg){if(msg.Msg==WM_HOTKEY){int id=msg.WParam.ToInt32()-1;if(id>=0&&id<9)LoadProfile(id);}base.WndProc(ref msg);}
