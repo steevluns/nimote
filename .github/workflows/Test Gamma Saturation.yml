@@ -1,0 +1,112 @@
+name: Test Gamma Hotkeys Saturation (Windows)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'GammaHotkeys/GammaHotkeys.cs'
+      - '.github/workflows/Test Gamma Saturation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  saturation-api-test:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build application
+        shell: pwsh
+        run: |
+          msbuild GammaHotkeys/GammaHotkeys.csproj /m /p:Configuration=Release /p:Platform=AnyCPU /verbosity:minimal
+          if ($LASTEXITCODE -ne 0) { throw "MSBuild failed: $LASTEXITCODE" }
+
+      - name: Test Windows Magnification saturation API
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Add-Type -AssemblyName System.Windows.Forms
+          Add-Type -AssemblyName System.Drawing
+          $source = @'
+          using System;
+          using System.Drawing;
+          using System.Runtime.InteropServices;
+          using System.Windows.Forms;
+
+          public class SaturationApiProbe : Form {
+            [DllImport("Magnification.dll", SetLastError=true)] static extern bool MagInitialize();
+            [DllImport("Magnification.dll", SetLastError=true)] static extern bool MagUninitialize();
+            [DllImport("user32.dll", CharSet=CharSet.Auto, SetLastError=true)]
+            static extern IntPtr CreateWindowEx(uint ex, string cls, string name, uint style,
+              int x, int y, int w, int h, IntPtr parent, IntPtr menu, IntPtr instance, IntPtr param);
+            [DllImport("Magnification.dll", SetLastError=true)]
+            static extern bool MagSetWindowSource(IntPtr hwnd, RECT rect);
+            [DllImport("Magnification.dll", SetLastError=true)]
+            static extern bool MagSetWindowTransform(IntPtr hwnd, ref TRANSFORM transform);
+            [DllImport("Magnification.dll", SetLastError=true)]
+            static extern bool MagSetColorEffect(IntPtr hwnd, [In] float[] effect);
+            [DllImport("user32.dll", SetLastError=true)] static extern bool DestroyWindow(IntPtr hwnd);
+            [StructLayout(LayoutKind.Sequential)] struct RECT { public int Left,Top,Right,Bottom; }
+            [StructLayout(LayoutKind.Sequential)] struct TRANSFORM {
+              [MarshalAs(UnmanagedType.ByValArray, SizeConst=9)] public float[] v;
+            }
+            const uint WS_CHILD=0x40000000, WS_VISIBLE=0x10000000;
+            IntPtr mag = IntPtr.Zero;
+            bool initialized = false;
+            public bool RunProbe() {
+              Bounds = SystemInformation.VirtualScreen;
+              FormBorderStyle = FormBorderStyle.None;
+              ShowInTaskbar = false;
+              TopMost = true;
+              Show();
+              Application.DoEvents();
+              initialized = MagInitialize();
+              if (!initialized) throw new Exception("MagInitialize failed: " + Marshal.GetLastWin32Error());
+              mag = CreateWindowEx(0, "Magnifier", null, WS_CHILD|WS_VISIBLE, 0, 0,
+                Math.Max(1, Width), Math.Max(1, Height), Handle, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+              if (mag == IntPtr.Zero) throw new Exception("Magnifier child creation failed: " + Marshal.GetLastWin32Error());
+              RECT r = new RECT { Left=SystemInformation.VirtualScreen.Left, Top=SystemInformation.VirtualScreen.Top,
+                Right=SystemInformation.VirtualScreen.Right, Bottom=SystemInformation.VirtualScreen.Bottom };
+              if (!MagSetWindowSource(mag, r)) throw new Exception("MagSetWindowSource failed: " + Marshal.GetLastWin32Error());
+              TRANSFORM t = new TRANSFORM { v = new float[] {1,0,0,0,1,0,0,0,1} };
+              if (!MagSetWindowTransform(mag, ref t)) throw new Exception("MagSetWindowTransform failed: " + Marshal.GetLastWin32Error());
+              foreach (int value in new int[] { 0, 50, 100, 150, 170 }) {
+                float sat = Math.Max(0f, Math.Min(1.7f, value / 100f));
+                float lr=.213f, lg=.715f, lb=.072f, inv=1f-sat;
+                float[] m = new float[25];
+                m[0]=lr*inv+sat; m[1]=lg*inv; m[2]=lb*inv;
+                m[5]=lr*inv; m[6]=lg*inv+sat; m[7]=lb*inv;
+                m[10]=lr*inv; m[11]=lg*inv; m[12]=lb*inv+sat;
+                m[18]=1f; m[24]=1f;
+                if (!MagSetColorEffect(mag, m))
+                  throw new Exception("MagSetColorEffect failed at " + value + "%: " + Marshal.GetLastWin32Error());
+                Application.DoEvents();
+                Console.WriteLine("PASS: MagSetColorEffect accepted saturation " + value + "%");
+              }
+              return true;
+            }
+            protected override void Dispose(bool disposing) {
+              if (mag != IntPtr.Zero) { DestroyWindow(mag); mag=IntPtr.Zero; }
+              if (initialized) { MagUninitialize(); initialized=false; }
+              base.Dispose(disposing);
+            }
+          }
+          '@
+          Add-Type -TypeDefinition $source -ReferencedAssemblies System.Windows.Forms,System.Drawing
+          $probe = New-Object SaturationApiProbe
+          try {
+            if (-not $probe.RunProbe()) { throw 'Saturation probe failed.' }
+            Write-Host 'PASS: Windows Magnification API accepted the full saturation range (0-170%).'
+          } finally {
+            $probe.Dispose()
+          }
+
+      - name: Upload executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: GammaHotkeys-Saturation-Test-Build
+          path: GammaHotkeys/bin/Release/GammaHotkeys.exe
+          if-no-files-found: error
