@@ -1,5 +1,6 @@
 name: Build Gamma Hotkeys (Windows 7)
 
+# Rebuild after fixing the C# compiler error.
 on:
   workflow_dispatch:
   push:
