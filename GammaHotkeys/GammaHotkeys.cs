@@ -60,10 +60,14 @@ internal sealed class SaturationOverlay:Form {
   float sat=Math.Max(0.0f,Math.Min(1.7f,value/100.0f));
   float lr=0.213f,lg=0.715f,lb=0.072f;
   float[] m=new float[25];
-  m[0]=lr+sat*(1-lr);m[1]=lg-sat*lr;m[2]=lb-sat*lr;
-  m[5]=lr-sat*lg;m[6]=lg+sat*(1-lg);m[7]=lb-sat*lg;
-  m[10]=lr-sat*lb;m[11]=lg-sat*lb;m[12]=lb+sat*(1-lb);
-  m[18]=1.0f;m[24]=1.0f;
+  // Standard luminance-preserving saturation matrix.
+  // 100% leaves the original colors unchanged; below 100% reduces saturation;
+  // above 100% increases saturation without introducing a green/purple tint.
+  float inv=1.0f-sat;
+  m[0]=lr*inv+sat; m[1]=lg*inv;     m[2]=lb*inv;
+  m[5]=lr*inv;     m[6]=lg*inv+sat; m[7]=lb*inv;
+  m[10]=lr*inv;    m[11]=lg*inv;    m[12]=lb*inv+sat;
+  m[18]=1.0f; m[24]=1.0f;
   return Native.MagSetColorEffect(magnifier,m);
  }
  protected override void WndProc(ref Message m){
