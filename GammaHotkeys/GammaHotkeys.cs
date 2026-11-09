@@ -15,10 +15,65 @@ internal static class Native {
  [DllImport("Magnification.dll")] public static extern bool MagSetFullscreenTransform(float magnification,int x,int y);
  [DllImport("Magnification.dll")] public static extern bool MagSetFullscreenColorEffect([In] float[] effect);
  [DllImport("user32.dll", EntryPoint="SetMagnificationDesktopColorEffect", SetLastError=true)] public static extern bool SetMagnificationDesktopColorEffect([In] float[] effect);
+
+ [DllImport("user32.dll", CharSet=CharSet.Auto, SetLastError=true)]
+ public static extern IntPtr CreateWindowEx(uint exStyle,string className,string windowName,uint style,int x,int y,int width,int height,IntPtr parent,IntPtr menu,IntPtr instance,IntPtr param);
+ [DllImport("user32.dll",SetLastError=true)] public static extern bool DestroyWindow(IntPtr hwnd);
+ [DllImport("user32.dll",SetLastError=true)] public static extern bool SetLayeredWindowAttributes(IntPtr hwnd,uint colorKey,byte alpha,uint flags);
+ [DllImport("Magnification.dll",SetLastError=true)] public static extern bool MagSetWindowSource(IntPtr hwnd,RECT source);
+ [DllImport("Magnification.dll",SetLastError=true)] public static extern bool MagSetColorEffect(IntPtr hwnd,[In] float[] effect);
+ [DllImport("Magnification.dll",SetLastError=true)] public static extern bool MagSetWindowFilterList(IntPtr hwnd,uint mode,int count,[In] IntPtr[] hwnds);
+ [DllImport("Magnification.dll",SetLastError=true)] public static extern bool MagSetWindowTransform(IntPtr hwnd,ref MagTransform transform);
+ [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left,Top,Right,Bottom; }
+ [StructLayout(LayoutKind.Sequential)] public struct MagTransform { [MarshalAs(UnmanagedType.ByValArray,SizeConst=9)] public float[] v; }
  [StructLayout(LayoutKind.Sequential)] public struct GammaRamp {
   [MarshalAs(UnmanagedType.ByValArray,SizeConst=256)] public ushort[] Red;
   [MarshalAs(UnmanagedType.ByValArray,SizeConst=256)] public ushort[] Green;
   [MarshalAs(UnmanagedType.ByValArray,SizeConst=256)] public ushort[] Blue;
+ }
+}
+
+
+internal sealed class SaturationOverlay:Form {
+ IntPtr magnifier=IntPtr.Zero;
+ bool ready=false;
+ const uint WS_CHILD=0x40000000,WS_VISIBLE=0x10000000,WS_EX_LAYERED=0x00080000;
+ const uint LWA_ALPHA=0x2,MW_FILTERMODE_EXCLUDE=1;
+ public SaturationOverlay(){
+  FormBorderStyle=FormBorderStyle.None;ShowInTaskbar=false;TopMost=true;
+  StartPosition=FormStartPosition.Manual;Bounds=SystemInformation.VirtualScreen;
+ }
+ protected override CreateParams CreateParams { get { CreateParams p=base.CreateParams;p.ExStyle|=WS_EX_LAYERED|0x00000080;return p; } }
+ protected override void OnShown(EventArgs e){
+  base.OnShown(e);
+  Native.SetLayeredWindowAttributes(Handle,0,255,LWA_ALPHA);
+  Rectangle r=SystemInformation.VirtualScreen;
+  magnifier=Native.CreateWindowEx(0,"Magnifier",null,WS_CHILD|WS_VISIBLE,0,0,r.Width,r.Height,Handle,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero);
+  if(magnifier==IntPtr.Zero)return;
+  Native.MagSetWindowFilterList(magnifier,MW_FILTERMODE_EXCLUDE,1,new IntPtr[]{Handle});
+  Native.RECT src=new Native.RECT();src.Left=r.Left;src.Top=r.Top;src.Right=r.Right;src.Bottom=r.Bottom;
+  Native.MagTransform t=new Native.MagTransform();t.v=new float[]{1,0,0,0,1,0,0,0,1};
+  ready=Native.MagSetWindowSource(magnifier,src)&&Native.MagSetWindowTransform(magnifier,ref t);
+ }
+ public bool SetSaturation(int value){
+  if(!ready||magnifier==IntPtr.Zero)return false;
+  float sat=Math.Max(0.0f,Math.Min(1.7f,value/100.0f));
+  float lr=0.213f,lg=0.715f,lb=0.072f;
+  float[] m=new float[25];
+  m[0]=lr+sat*(1-lr);m[1]=lg-sat*lr;m[2]=lb-sat*lr;
+  m[5]=lr-sat*lg;m[6]=lg+sat*(1-lg);m[7]=lb-sat*lg;
+  m[10]=lr-sat*lb;m[11]=lg-sat*lb;m[12]=lb+sat*(1-lb);
+  m[18]=1.0f;m[24]=1.0f;
+  return Native.MagSetColorEffect(magnifier,m);
+ }
+ protected override void WndProc(ref Message m){
+  const int WM_NCHITTEST=0x84;const int HTTRANSPARENT=-1;
+  if(m.Msg==WM_NCHITTEST){m.Result=(IntPtr)HTTRANSPARENT;return;}
+  base.WndProc(ref m);
+ }
+ protected override void OnFormClosed(FormClosedEventArgs e){
+  if(magnifier!=IntPtr.Zero){Native.DestroyWindow(magnifier);magnifier=IntPtr.Zero;}
+  base.OnFormClosed(e);
  }
 }
 
@@ -27,7 +82,7 @@ internal sealed class HotkeyWindow:Form {
  Keys[] profileKeys=new Keys[9]; uint[] profileMods=new uint[9]; string[] profileNames=new string[9];
  const int WM_HOTKEY=0x312;
  int brightness=100,contrast=100,gamma=100,saturation=100,red=100,green=100,blue=100;
- bool magnificationReady=false;
+ bool magnificationReady=false; SaturationOverlay saturationOverlay=null;
  string ConfigFile { get { return Path.Combine(Application.UserAppDataPath,"settings.ini"); } }
  public HotkeyWindow(){
   LoadConfig();LoadProfiles();
@@ -35,7 +90,7 @@ internal sealed class HotkeyWindow:Form {
   Load+=Loaded;FormClosing+=Closing;
  }
  void Loaded(object s,EventArgs e){
-  try{magnificationReady=Native.MagInitialize();if(magnificationReady)Native.MagSetFullscreenTransform(1.0f,0,0);}catch{magnificationReady=false;}
+  try{magnificationReady=Native.MagInitialize();}catch{magnificationReady=false;}
   tray=new NotifyIcon();tray.Icon=SystemIcons.Application;tray.Text="Gamma Hotkeys";ContextMenu m=new ContextMenu();
   m.MenuItems.Add("الإعدادات: الألوان والسطوع",delegate{ShowSettings();});
   m.MenuItems.Add("تطبيق الإعدادات الحالية",delegate{ApplyCurrent();});
@@ -69,24 +124,19 @@ internal sealed class HotkeyWindow:Form {
  }
  float ClampF(float v,float lo,float hi){return Math.Max(lo,Math.Min(hi,v));}
  bool ApplyColorMatrix(){
-  float sat=ClampF(saturation/100.0f,0.0f,2.0f);
-  float c=1.0f,b=0.0f,lr=0.213f,lg=0.715f,lb=0.072f;float[] m=new float[25];
-  m[0]=(lr+sat*(1-lr))*c;m[1]=(lg-sat*lr)*c;m[2]=(lb-sat*lr)*c;
-  m[5]=(lr-sat*lg)*c;m[6]=(lg+sat*(1-lg))*c;m[7]=(lb-sat*lg)*c;
-  m[10]=(lr-sat*lb)*c;m[11]=(lg-sat*lb)*c;m[12]=(lb+sat*(1-lb))*c;
-  m[18]=1.0f;m[4]=0.5f*(1-c)+b;m[9]=0.5f*(1-c)+b;m[14]=0.5f*(1-c)+b;m[24]=1.0f;
-  try{if(Environment.OSVersion.Version.Major==6&&Environment.OSVersion.Version.Minor==1)return Native.SetMagnificationDesktopColorEffect(m);if(magnificationReady)return Native.MagSetFullscreenColorEffect(m);}catch{}
-  return false;
+  if(saturation==100){if(saturationOverlay!=null){saturationOverlay.Close();saturationOverlay.Dispose();saturationOverlay=null;}return true;}
+  if(!magnificationReady)return false;
+  if(saturationOverlay==null){saturationOverlay=new SaturationOverlay();saturationOverlay.Show();}
+  return saturationOverlay.SetSaturation(saturation);
  }
  void ResetColorMatrix(){
-  float[] identity=new float[]{1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1};
-  try{if(Environment.OSVersion.Version.Major==6&&Environment.OSVersion.Version.Minor==1)Native.SetMagnificationDesktopColorEffect(identity);else if(magnificationReady)Native.MagSetFullscreenColorEffect(identity);}catch{}
+  if(saturationOverlay!=null){saturationOverlay.Close();saturationOverlay.Dispose();saturationOverlay=null;}
  }
  void ShowSettings(){using(SettingsForm f=new SettingsForm(this))f.ShowDialog();}
  void SaveConfig(){try{Directory.CreateDirectory(Application.UserAppDataPath);using(StreamWriter w=new StreamWriter(ConfigFile,false)){w.WriteLine(brightness);w.WriteLine(contrast);w.WriteLine(gamma);w.WriteLine(saturation);w.WriteLine(red);w.WriteLine(green);w.WriteLine(blue);}}catch(Exception ex){MessageBox.Show("تعذر حفظ الإعدادات: "+ex.Message);}}
  void LoadConfig(){try{if(!File.Exists(ConfigFile))return;string[] a=File.ReadAllLines(ConfigFile);if(a.Length<7)return;brightness=Clamp(int.Parse(a[0]),20,170);contrast=Clamp(int.Parse(a[1]),20,170);gamma=Clamp(int.Parse(a[2]),20,170);saturation=Clamp(int.Parse(a[3]),0,170);red=Clamp(int.Parse(a[4]),20,170);green=Clamp(int.Parse(a[5]),20,170);blue=Clamp(int.Parse(a[6]),20,170);}catch{}}
  static int Clamp(int v,int min,int max){return Math.Max(min,Math.Min(max,v));}
- void Closing(object s,FormClosingEventArgs e){for(int i=1;i<=9;i++)Native.UnregisterHotKey(Handle,i);if(tray!=null){tray.Visible=false;tray.Dispose();}ResetColorMatrix();SetNeutral();if(magnificationReady){try{Native.MagUninitialize();}catch{}}}
+ void Closing(object s,FormClosingEventArgs e){for(int i=1;i<=9;i++)Native.UnregisterHotKey(Handle,i);if(tray!=null){tray.Visible=false;tray.Dispose();}ResetColorMatrix();if(magnificationReady){try{Native.MagUninitialize();}catch{}}}
  sealed class SettingsForm:Form {
   HotkeyWindow owner;TrackBar[] bars=new TrackBar[7];Label[] values=new Label[7]; TextBox hotkeyBox; TextBox profileNameBox; Keys capturedKey=Keys.None; uint capturedMods=0;
   string[] labels={"Brightness / السطوع","Contrast / التباين","Gamma","Color Saturation / تشبع الألوان","Red / الأحمر","Green / الأخضر","Blue / الأزرق"};
