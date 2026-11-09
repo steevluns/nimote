@@ -1,0 +1,49 @@
+name: Inspect Gamma Hotkeys (Windows)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'GammaHotkeys/**'
+      - '.github/workflows/Inspect Gamma Hotkeys.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build application
+        shell: pwsh
+        run: |
+          msbuild GammaHotkeys/GammaHotkeys.csproj /m /p:Configuration=Release /p:Platform=AnyCPU /verbosity:minimal
+          if ($LASTEXITCODE -ne 0) { throw "MSBuild failed with exit code $LASTEXITCODE" }
+
+      - name: Smoke test application startup
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path "GammaHotkeys/bin/Release/GammaHotkeys.exe"
+          $p = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 8
+          $p.Refresh()
+          if ($p.HasExited) {
+            throw "GammaHotkeys exited during startup. ExitCode=$($p.ExitCode)"
+          }
+          Write-Host "PASS: GammaHotkeys stayed running for 8 seconds (tray startup smoke test)."
+          Stop-Process -Id $p.Id -Force
+          Write-Host "Test process stopped."
+
+      - name: Upload executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: GammaHotkeys-Inspection-Build
+          path: GammaHotkeys/bin/Release/GammaHotkeys.exe
+          if-no-files-found: error
